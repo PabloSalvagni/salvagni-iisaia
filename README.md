@@ -3,11 +3,8 @@
 
 Repo de trabajos practicos de la cursada del 4 Bimestre de 2026.
 
----
-
-Tps emtregabñes: 
-- 
-
+### Tps emtregables: 
+----
 
 | Ejercicio | Link | Estado |
 | --- | --- | --- |
