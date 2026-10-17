@@ -1,0 +1,433 @@
+openapi: 3.1.0
+info:
+  title: API de socios y cuenta corriente del club
+  version: 1.0.0
+  description: >
+    Gestión de los socios de un club y consulta de su cuenta corriente.
+    El club se identifica siempre por el `slug` del path; ningún schema lleva el id del club.
+
+servers:
+  - url: https://clubdesocios.com.ar/api
+
+security:
+  - sessionCookie: []
+
+tags:
+  - name: Socios
+  - name: Cuenta corriente
+
+paths:
+  /clubs/{slug}/socios:
+    parameters:
+      - $ref: '#/components/parameters/Slug'
+    get:
+      tags: [Socios]
+      operationId: listarSocios
+      summary: Lista los socios del club
+      parameters:
+        - name: activo
+          in: query
+          required: false
+          description: Filtra por socios activos (`true`) o dados de baja (`false`). Si se omite, devuelve todos.
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: Lista de socios del club (puede estar vacía).
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Socio'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    post:
+      tags: [Socios]
+      operationId: crearSocio
+      summary: Da de alta un socio en el club
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SocioInput'
+      responses:
+        '201':
+          description: Socio creado. `id` y `nroSocio` los asigna el servidor.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Socio'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Ya existe un socio con ese DNI en el club.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: Ya existe un socio con el DNI 30123456
+
+  /clubs/{slug}/socios/{socioId}:
+    parameters:
+      - $ref: '#/components/parameters/Slug'
+      - $ref: '#/components/parameters/SocioId'
+    get:
+      tags: [Socios]
+      operationId: obtenerSocio
+      summary: Obtiene un socio del club
+      responses:
+        '200':
+          description: El socio.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Socio'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Socios]
+      operationId: darDeBajaSocio
+      summary: Da de baja un socio (baja lógica)
+      description: >
+        Baja lógica: el socio no se borra porque tiene historial de cargos y pagos.
+        Queda con `activo=false` y `bajaAt` con el momento de la baja, y sigue siendo
+        consultable con `GET` y con `?activo=false`.
+      responses:
+        '204':
+          description: Socio dado de baja. Sin cuerpo.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /clubs/{slug}/socios/{socioId}/cargos:
+    parameters:
+      - $ref: '#/components/parameters/Slug'
+      - $ref: '#/components/parameters/SocioId'
+    get:
+      tags: [Cuenta corriente]
+      operationId: listarCargosDeSocio
+      summary: Lista los cargos de la cuenta corriente del socio
+      description: >
+        Los cargos los genera el sistema (cuotas por período, clases, eventos); no hay alta manual.
+        Un socio existente sin cargos devuelve `200` con lista vacía; `404` significa que el club o el socio no existen.
+      parameters:
+        - name: estado
+          in: query
+          required: false
+          description: Filtra por estado del cargo. Si se omite, devuelve todos.
+          schema:
+            $ref: '#/components/schemas/EstadoCargo'
+      responses:
+        '200':
+          description: Lista de cargos del socio (puede estar vacía).
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Cargo'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /clubs/{slug}/socios/{socioId}/pagos:
+    parameters:
+      - $ref: '#/components/parameters/Slug'
+      - $ref: '#/components/parameters/SocioId'
+    post:
+      tags: [Cuenta corriente]
+      operationId: registrarPago
+      summary: Registra un pago que cancela uno o más cargos del socio
+      description: >
+        El `monto` del pago lo calcula el servidor sumando los montos de los cargos indicados;
+        no viaja en la entrada. Al registrarse el pago, los cargos pasan a estado `PAGADO`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PagoInput'
+      responses:
+        '201':
+          description: Pago registrado, con el monto calculado y los cargos que cancela.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Pago'
+        '400':
+          description: >
+            Falta un campo requerido o tiene un formato inválido, o algún cargo de `cargoIds`
+            no está `PENDIENTE` o no pertenece a ese socio.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                cargoNoPendiente:
+                  summary: Un cargo ya no está pendiente
+                  value:
+                    error: El cargo car_91jd7a no está PENDIENTE
+                cargoDeOtroSocio:
+                  summary: Un cargo es de otro socio
+                  value:
+                    error: El cargo car_77ab12 no pertenece al socio
+                faltaCampo:
+                  summary: Falta un campo requerido
+                  value:
+                    error: 'Falta el campo requerido: medio'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: session
+      description: >
+        Cookie de sesión que se obtiene al iniciar sesión. El usuario de la sesión
+        tiene que ser administrador del club indicado por `slug`.
+
+  parameters:
+    Slug:
+      name: slug
+      in: path
+      required: true
+      description: Identificador del club en la URL.
+      schema:
+        type: string
+        pattern: '^[a-z0-9]+(?:-[a-z0-9]+)*$'
+      example: club-atletico-ejemplo
+    SocioId:
+      name: socioId
+      in: path
+      required: true
+      description: Id del socio (el que genera el servidor, no el `nroSocio`).
+      schema:
+        type: string
+
+  responses:
+    BadRequest:
+      description: Falta un campo requerido o tiene un formato inválido.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: 'Falta el campo requerido: dni'
+    Unauthorized:
+      description: No hay sesión, o la cookie de sesión es inválida o expiró.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: No autenticado
+    Forbidden:
+      description: Hay sesión, pero el usuario no es administrador de ese club.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: No tenés permisos sobre este club
+    NotFound:
+      description: El club o el socio no existen.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: Club no encontrado
+
+  schemas:
+    SocioInput:
+      type: object
+      description: Datos para dar de alta un socio. No incluye `id`, `nroSocio`, `activo` ni `bajaAt`, porque los maneja el servidor.
+      additionalProperties: false
+      required: [nombre, apellido, dni, tipoSocioId]
+      properties:
+        nombre:
+          type: string
+          minLength: 1
+          example: Juan
+        apellido:
+          type: string
+          minLength: 1
+          example: Pérez
+        dni:
+          type: string
+          pattern: '^[0-9]{7,8}$'
+          example: '30123456'
+        email:
+          type: string
+          format: email
+          example: juan.perez@example.com
+        tipoSocioId:
+          type: string
+          example: tipo-activo
+
+    Socio:
+      type: object
+      required: [id, nroSocio, nombre, apellido, dni, tipoSocioId, activo]
+      properties:
+        id:
+          type: string
+          description: Generado por el servidor.
+          example: soc_8f3k2l
+        nroSocio:
+          type: integer
+          minimum: 1
+          description: Número de socio dentro del club, generado por el servidor.
+          example: 1042
+        nombre:
+          type: string
+          example: Juan
+        apellido:
+          type: string
+          example: Pérez
+        dni:
+          type: string
+          pattern: '^[0-9]{7,8}$'
+          example: '30123456'
+        email:
+          type: string
+          format: email
+          example: juan.perez@example.com
+        tipoSocioId:
+          type: string
+          example: tipo-activo
+        activo:
+          type: boolean
+          example: true
+        bajaAt:
+          type: string
+          format: date-time
+          description: Momento de la baja. Solo presente si el socio fue dado de baja.
+          example: '2026-09-30T15:00:00Z'
+
+    Cargo:
+      type: object
+      description: Cargo de la cuenta corriente. Solo de salida; lo genera el sistema.
+      required: [id, concepto, descripcion, periodo, monto, vencimiento, estado]
+      properties:
+        id:
+          type: string
+          example: car_91jd7a
+        concepto:
+          type: string
+          enum: [CUOTA, CLASE, EVENTO]
+          example: CUOTA
+        descripcion:
+          type: string
+          example: Cuota social octubre 2026
+        periodo:
+          type: string
+          pattern: '^[0-9]{4}-(0[1-9]|1[0-2])$'
+          description: Período en formato YYYY-MM.
+          example: 2026-10
+        monto:
+          type: integer
+          minimum: 0
+          description: Importe en pesos enteros.
+          example: 15000
+        vencimiento:
+          type: string
+          format: date
+          example: '2026-10-10'
+        estado:
+          $ref: '#/components/schemas/EstadoCargo'
+
+    EstadoCargo:
+      type: string
+      enum: [PENDIENTE, PAGADO, ANULADO]
+      example: PENDIENTE
+
+    PagoInput:
+      type: object
+      description: Datos para registrar un pago. No incluye `monto`, porque lo calcula el servidor.
+      additionalProperties: false
+      required: [cargoIds, medio]
+      properties:
+        cargoIds:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          description: Ids de los cargos que cancela el pago. Deben ser del socio y estar `PENDIENTE`.
+          items:
+            type: string
+          example: [car_91jd7a, car_4kq8zm]
+        medio:
+          $ref: '#/components/schemas/MedioPago'
+
+    Pago:
+      type: object
+      description: Pago registrado. Solo de salida.
+      required: [id, monto, medio, fecha, cargos]
+      properties:
+        id:
+          type: string
+          description: Generado por el servidor.
+          example: pag_2m9x4c
+        monto:
+          type: integer
+          minimum: 0
+          description: Importe en pesos enteros; suma de los montos de `cargos`, calculada por el servidor.
+          example: 30000
+        medio:
+          type: string
+          enum: [EFECTIVO, TRANSFERENCIA, ONLINE, OTRO]
+          description: >
+            Medio del pago. Incluye `ONLINE` para los pagos que el socio hace desde la app;
+            un admin no puede registrar un pago `ONLINE` (ver `MedioPago` en `PagoInput`).
+          example: TRANSFERENCIA
+        fecha:
+          type: string
+          format: date-time
+          example: '2026-10-17T18:04:00-03:00'
+        cargos:
+          type: array
+          minItems: 1
+          description: Cargos que cancela el pago, ya en estado `PAGADO`.
+          items:
+            $ref: '#/components/schemas/Cargo'
+
+    MedioPago:
+      type: string
+      enum: [EFECTIVO, TRANSFERENCIA, OTRO]
+      example: TRANSFERENCIA
+
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+          example: Club no encontrado
