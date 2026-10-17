@@ -10,4 +10,4 @@ Repo de trabajos practicos de la cursada del 4 Bimestre de 2026.
 | --- | --- | --- |
 | TP1 | [/tp1](tp1/README.md) | Resuelto |
 | TP2 | [/tp2](tp2/)  | Pendiente |
-| Trabajo Práctivo Final | [/tp-final](tp-final/)  | Pendiente |
+| Trabajo Práctivo Final | [/tp-final](https://github.com/ivollonoc/IISAIA-TF/)  | Resuelto |
