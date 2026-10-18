@@ -4,7 +4,7 @@ Un `openapi.yaml` que describe la API del TP final, la Gestión de Clubes ([demo
 
 ### Cómo se usa
 
-Pegar el contenido de [openapi.yaml](openapi.yaml) en [editor.swagger.io](https://editor.swagger.io). Del lado derecho aparece la documentación navegable, con cada endpoint desplegable y su "Try it out".
+Abrir [openapi.yaml](openapi.yaml) en [editor.swagger.io](https://editor.swagger.io/?url=https://raw.githubusercontent.com/PabloSalvagni/salvagni-iisaia/main/tp2/openapi.yaml), que lo carga directamente. Del lado derecho aparece la documentación navegable, con cada endpoint desplegable y su "Try it out".
 
 ### Qué me propuse construir
 
